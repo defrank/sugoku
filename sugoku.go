@@ -12,10 +12,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/defrank/sugoku/sudoku"
 	"github.com/gdamore/tcell"
 	"github.com/urfave/cli/v2" // imports as package "cli"
-	// "github.com/defrank/sugoku/sudoku"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 func main() {
 	app := cli.NewApp()
@@ -30,45 +34,6 @@ func main() {
 	app.Version = "0.1.0"
 	app.Action = func(c *cli.Context) error {
 		fmt.Println(fmt.Sprintf("Welcome to %s!", app.Name))
-		s := initScreen()
-		// _, screenHeight := s.Size()
-
-		quit := make(chan struct{})
-		go func() {
-			for {
-				ev := s.PollEvent()
-				switch ev := ev.(type) {
-				case *tcell.EventKey:
-					switch ev.Key() {
-					case tcell.KeyEscape, tcell.KeyEnter:
-						close(quit)
-						return
-					case tcell.KeyCtrlL:
-						s.Sync()
-					}
-				case *tcell.EventResize:
-					s.Sync()
-				}
-			}
-		}()
-
-		cnt := 0
-		dur := time.Duration(0)
-	loop:
-		for {
-			select {
-			case <-quit:
-				break loop
-			case <-time.After(time.Millisecond * 50):
-			}
-			start := time.Now()
-			makebox(s)
-			cnt++
-			dur += time.Now().Sub(start)
-		}
-
-		//s.Show()
-		s.Fini()
 		return nil
 	}
 	app.Commands = []*cli.Command{
@@ -76,10 +41,7 @@ func main() {
 			Name:    "play",
 			Aliases: []string{"p"},
 			Usage:   "Play Sudoku of default size 9",
-			Action: func(c *cli.Context) error {
-				fmt.Println("Playing Sugoku!")
-				return nil
-			},
+			Action:  play,
 		},
 	}
 
@@ -105,6 +67,82 @@ func initScreen() tcell.Screen {
 	s.Clear()
 
 	return s
+}
+
+func play(c *cli.Context) error {
+	s := initScreen()
+	// _, screenHeight := s.Size()
+
+	st := tcell.StyleDefault.
+		Background(tcell.ColorBlack).
+		Foreground(tcell.ColorWhite)
+	s.SetStyle(st)
+
+	g := sudoku.NewGrid(9)
+	for box := range g.Iter() {
+		if v := rand.Int() % 10; v != 0 {
+			g.Set(box.X, box.Y, v)
+		}
+	}
+
+	quit := make(chan struct{})
+	go func() {
+		for {
+			ev := s.PollEvent()
+			switch ev := ev.(type) {
+			case *tcell.EventKey:
+				switch ev.Key() {
+				case tcell.KeyEscape, tcell.KeyEnter:
+					close(quit)
+					return
+				case tcell.KeyCtrlL:
+					s.Sync()
+				}
+			case *tcell.EventResize:
+				s.Sync()
+			}
+		}
+	}()
+
+	cnt := 0
+	dur := time.Duration(0)
+
+loop:
+	for {
+		select {
+		case <-quit:
+			break loop
+		case <-time.After(time.Millisecond * 50):
+		}
+		start := time.Now()
+		makegrid(s, g)
+		cnt++
+		dur += time.Now().Sub(start)
+	}
+
+	s.Fini()
+	return nil
+}
+
+func makegrid(s tcell.Screen, g *sudoku.Grid) {
+	size := g.Size()
+	w, h := s.Size()
+
+	if w < size || h < size {
+		return
+	}
+
+	st := tcell.StyleDefault.
+		Foreground(tcell.ColorGreen).
+		Background(tcell.ColorBlack)
+
+	glyphs := []rune{' ', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
+
+	for box := range g.Iter() {
+		s.SetCell(box.Y, box.X, st, glyphs[box.V])
+	}
+
+	s.Show()
 }
 
 func makebox(s tcell.Screen) {

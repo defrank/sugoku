@@ -54,6 +54,12 @@ func (c *cell) String() string {
 type Segment struct {
 }
 
+type Box struct {
+	X int
+	Y int
+	V int
+}
+
 type Grid struct {
 	size  int
 	cells [][]cell
@@ -91,6 +97,23 @@ func (g *Grid) Set(x, y, v int) {
 	g.valueBoundsCheck(v)
 
 	g.cells[y][x].value = v
+}
+
+func (g *Grid) Size() int {
+	return g.size
+}
+
+func (g *Grid) Iter() <-chan Box {
+	ch := make(chan Box, g.size)
+	go func() {
+		for row := 0; row < g.size; row++ {
+			for col := 0; col < g.size; col++ {
+				ch <- Box{col, row, g.cells[row][col].get()}
+			}
+		}
+		close(ch)
+	}()
+	return ch
 }
 
 func (g *Grid) indexBoundsCheck(i int, s string) {
